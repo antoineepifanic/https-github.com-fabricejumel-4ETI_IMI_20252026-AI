@@ -1,50 +1,9 @@
-# 4ETI_20252026-IAVISION (IMI-AI)
+L'ensemble des codes et autres a été réalisé par Antoine EPIFANIC.
 
+J'ai fait les TP A et B.
 
-## Module VISION
+Pour le TP A, voir les codes test_opencv_dnn_yolo_coco.py et webcam_opencv_dnn_yolo_coco.py et le rendu sous forme de mosaïque. Voir aussi le dossier TPADocuments avec les différentes captures d'écran ainsi que le compte rendu.
 
-<img src="img/th.jpeg" height="300">
+Pour le TP B, voir le ipynb cifar dans lequel il y'a toutes les informations.
 
-
-> [!IMPORTANT]
-> Le rendu se fera  en monome,binome,trinome  sous forme d'un git sous github ou vous donnerez le droit maintener à fabricejumel. Des le premier jour, envoyé moi vos constititions de groupe par mail avec vos noms et comptes github.
-> 
-
-> [!CAUTION]
-> Le rendu doit être finalisé pour le lundi 4  mai 2026,  23H00 et sera tagué "V1" 
-
-
-Il est recommandé de travailler dans un environnement virtuel
-
-``` bash
-# Creation initiale  du virtual env
-python -m venv venv_iavision2026
-# Activation du virtual env, a refaire a chaque ouverture d'un terminal
-source venv_iavision2026/bin/activate
-#installation des requirements (à faire une fois avec le virtual env activé)
-pip install -r requirements.txt
-````
-
-| :boom: DANGER              |
-|:---------------------------|
-| :exclamation: Ne jamais inclure votre venv  ou des .pyc sur github sous peine de non validation du module  :exclamation:|
- 
-
-Les actvités
-
-Les TP A et B peuvent être fait en parrallele, le TP C necessite que le B soit compris
-
-TP A [TP Intro detection ](TP_vision_detection.md)
-
-La partie la plus interessante (fine tuning d'un YOLO)  et la partie 3 , elle ne nécessite pas de faire les partie 1 et 2 .
-
-TP B [TP classification et CNN ](TP_classifcation.md)
-
-TP C (bonus) [TP Vision Transformer ](https://github.com/fabricejumel/VIT_2025)
-
-
-
-
-
-
-
+J'ai utilisé l'environnement virtuel que vous aviez recommandé.
