@@ -1,78 +1,150 @@
 import cv2
 import numpy as np
+import argparse
+import json
+import os
+import math
 
-# Load the YOLOv3 model with OpenCV
-net = cv2.dnn.readNet("yolov3-tiny.weights", "yolov3-tiny.cfg")
 
-# Load the COCO class labels
-with open("coco.names", "r") as f:
+# Q2.1Configuration via ligne de commande
+
+parser = argparse.ArgumentParser(description='Détection YOLO avec filtres, JSON et Mosaïque')
+parser.add_argument('--input', type=str, default='0', help='Chemin vers une image, une vidéo, ou "0" pour la webcam')
+parser.add_argument('--classes', type=str, nargs='+', default=[], help='Liste des classes à filtrer (ex: person dog car). Vide = tout afficher.')
+parser.add_argument('--output_dir', type=str, default='output', help='Dossier où sauvegarder les crops et le JSON')
+args = parser.parse_args()
+
+if not os.path.exists(args.output_dir):
+    os.makedirs(args.output_dir)
+
+net = cv2.dnn.readNet("detection/yolov3-tiny.weights", "detection/yolov3-tiny.cfg")
+with open("detection/coco.names", "r") as f:
     classes = f.read().strip().split("\n")
 
-# Load an image for object detection
-image = cv2.imread("image.jpg")
+is_image = args.input.lower().endswith(('.png', '.jpg', '.jpeg'))
+if is_image:
+    cap = None
+    frame = cv2.imread(args.input)
+else:
+    source = int(args.input) if args.input == '0' else args.input
+    cap = cv2.VideoCapture(source)
 
-# Get the height and width of the image
-height, width = image.shape[:2]
+json_data = {
+    "source": args.input,
+    "detections": []
+}
+crops_by_class = {c: [] for c in classes} 
+frame_count = 0
 
-# Create a blob from the image (preprocess)
-blob = cv2.dnn.blobFromImage(image, 1/255.0, (416, 416), swapRB=True, crop=False)
+while True:
+    if not is_image:
+        ret, frame = cap.read()
+        if not ret:
+            break
+    
+    frame_count += 1
+    height, width = frame.shape[:2]
 
-# Set the input to the neural network
-net.setInput(blob)
+    blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
+    net.setInput(blob)
+    layer_names = net.getUnconnectedOutLayersNames()
+    outs = net.forward(layer_names)
 
-# Get the output layer names
-layer_names = net.getUnconnectedOutLayersNames()
+    class_ids, confidences, boxes = [], [], []
+    conf_threshold = 0.2
 
-# Run forward pass through the network
-outs = net.forward(layer_names)
+    for out in outs:
+        for detection in out:
+            scores = detection[5:]
+            class_id = np.argmax(scores)
+            confidence = scores[class_id]
 
-# Initialize lists to store detected objects' class IDs, confidences, and bounding boxes
-class_ids = []
-confidences = []
-boxes = []
+            if confidence > conf_threshold:
+                center_x, center_y = int(detection[0] * width), int(detection[1] * height)
+                w, h = int(detection[2] * width), int(detection[3] * height)
+                x = int(center_x - w / 2)
+                y = int(center_y - h / 2)
 
-# Minimum confidence threshold for object detection
-conf_threshold = 0.2
+                class_ids.append(class_id)
+                confidences.append(float(confidence))
+                boxes.append([x, y, w, h])
 
-# Iterate through each output layer
-for out in outs:
-    # Iterate through each detection in the output
-    for detection in out:
-        scores = detection[5:]
-        class_id = np.argmax(scores)
-        confidence = scores[class_id]
+    indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, 0.4)
 
-        if confidence > conf_threshold:
-            # Scale the bounding box coordinates to the original image size
-            center_x = int(detection[0] * width)
-            center_y = int(detection[1] * height)
-            w = int(detection[2] * width)
-            h = int(detection[3] * height)
+    if len(indices) > 0:
+        for i in indices.flatten():
+            label = str(classes[class_ids[i]])
+            
+            # Q2.1Filtrage des classes
+            if len(args.classes) > 0 and label not in args.classes:
+                continue
 
-            # Calculate the top-left corner of the bounding box
-            x = int(center_x - w / 2)
-            y = int(center_y - h / 2)
+            confidence = confidences[i]
+            x, y, w, h = boxes[i]
+            
+            x_start, y_start = max(0, x), max(0, y)
+            x_end, y_end = min(width, x + w), min(height, y + h)
 
-            class_ids.append(class_id)
-            confidences.append(float(confidence))
-            boxes.append([x, y, w, h])
+            # Q2.2Stockage pour le JSON
+            json_data["detections"].append({
+                "frame": frame_count,
+                "class": label,
+                "confidence": round(confidence, 2),
+                "bounding_box": {"x": x_start, "y": y_start, "w": w, "h": h}
+            })
 
-# Non-maximum suppression to remove redundant boxes
-nms_threshold = 0.4
-indices = cv2.dnn.NMSBoxes(boxes, confidences, conf_threshold, nms_threshold)
+            # Q2.3Sauvegarde de la Bounding Box sous forme d'image
+            if y_end > y_start and x_end > x_start:
+                crop_img = frame[y_start:y_end, x_start:x_end]
+                crops_by_class[label].append(crop_img)
+                
+                crop_filename = f"{args.output_dir}/{label}_f{frame_count}_{i}.jpg"
+                cv2.imwrite(crop_filename, crop_img)
 
-# Draw bounding boxes and labels on the image
-for i in indices:
-    #i = i[0]
-    x, y, w, h = boxes[i]
-    label = str(classes[class_ids[i]])
-    confidence = confidences[i]
-    color = (0, 255, 0)  # Green color for the bounding box
-    cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
-    cv2.putText(image, f"{label} {confidence:.2f}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            cv2.rectangle(frame, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label} {confidence:.2f}", (x_start, y_start - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-# Display the resulting image
-cv2.imshow("Object Detection", image)
-cv2.waitKey(0)
+    cv2.imshow("Detection YOLO", frame)
+
+
+    if is_image:
+        cv2.waitKey(0)
+        break
+    else:
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+if not is_image:
+    cap.release()
 cv2.destroyAllWindows()
 
+
+# SAUVEGARDE FINALE (JSON & MOSAÏQUE)
+
+json_path = os.path.join(args.output_dir, "detections.json")
+with open(json_path, 'w') as json_file:
+    json.dump(json_data, json_file, indent=4)
+print(f"[*] Données JSON sauvegardées dans {json_path}")
+
+
+print("[*] Génération des mosaïques...")
+for label, crops in crops_by_class.items():
+    if len(crops) > 0:
+        size = 100
+        resized_crops = [cv2.resize(img, (size, size)) for img in crops]
+        
+        grid_size = math.ceil(math.sqrt(len(resized_crops)))
+        
+        mosaic = np.zeros((grid_size * size, grid_size * size, 3), dtype=np.uint8)
+        
+        for idx, crop in enumerate(resized_crops):
+            row = idx // grid_size
+            col = idx % grid_size
+            mosaic[row*size:(row+1)*size, col*size:(col+1)*size] = crop
+            
+        mosaic_path = os.path.join(args.output_dir, f"mosaic_{label}.jpg")
+        cv2.imwrite(mosaic_path, mosaic)
+        print(f"    -> Mosaïque créée pour '{label}': {mosaic_path}")
+
+print("[*] Terminé !")
